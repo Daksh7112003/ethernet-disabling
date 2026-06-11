@@ -15,14 +15,12 @@ EthernetDisable::EthernetDisable(QObject *parent)
 {
 }
 
-namespace {
-// The IP to watch for on local machine:
-const QHostAddress WATCH_IP(QStringLiteral("192.168.144.10"));
-}
+#include <QAbstractSocket>
 
-// Helper: find the interface human-readable name that has WATCH_IP assigned and is up.
-// Returns empty string if not found.
-static QString findInterfaceNameWithIp()
+namespace {
+// Helper: find an Ethernet interface named "Ethernet" (or starting with "Ethernet ") that is up and has an IPv4 address.
+// Returns the human-readable adapter name and writes the IP address to outIp.
+static QString findEthernetAdapter(QHostAddress &outIp)
 {
     for (const QNetworkInterface &iface : QNetworkInterface::allInterfaces()) {
         // Must be an Ethernet-like interface and be up
@@ -31,15 +29,23 @@ static QString findInterfaceNameWithIp()
         if (!iface.flags().testFlag(QNetworkInterface::IsUp))
             continue;
 
-        // Check address entries for the IPv4 address
-        for (const QNetworkAddressEntry &entry : iface.addressEntries()) {
-            if (entry.ip() == WATCH_IP) {
-                // return the human readable name (what netsh reports)
-                return iface.humanReadableName();
+        QString name = iface.humanReadableName();
+        // Check if name is "Ethernet" or starts with "Ethernet " (case-insensitive)
+        if (name.compare("Ethernet", Qt::CaseInsensitive) == 0 ||
+            name.startsWith("Ethernet ", Qt::CaseInsensitive)) 
+        {
+            // Find its first IPv4 address
+            for (const QNetworkAddressEntry &entry : iface.addressEntries()) {
+                QHostAddress ip = entry.ip();
+                if (ip.protocol() == QAbstractSocket::IPv4Protocol) {
+                    outIp = ip;
+                    return name;
+                }
             }
         }
     }
     return QString();
+}
 }
 
 void EthernetDisable::monitorAndDisableEthernet(int idleSeconds)
@@ -51,15 +57,16 @@ void EthernetDisable::monitorAndDisableEthernet(int idleSeconds)
 
     QtConcurrent::run([=]() {
 
-        // -------- STEP 0: Discover interface by WATCH_IP --------
-        QString adapterName = findInterfaceNameWithIp();
+        // -------- STEP 0: Discover Ethernet adapter and its IP --------
+        QHostAddress initialIp;
+        QString adapterName = findEthernetAdapter(initialIp);
         if (adapterName.isEmpty()) {
-            qDebug() << "No interface found with IP" << WATCH_IP.toString();
+            qDebug() << "No Ethernet interface found.";
             return;
         }
 
-        qDebug() << "Monitoring traffic for interface (by IP)" << WATCH_IP.toString()
-                 << "-> adapter name:" << adapterName;
+        qDebug() << "Monitoring traffic for interface" << adapterName
+                 << "with IP" << initialIp.toString();
 
         // -------- STEP 1: RX/TX Byte reader --------
         struct Traffic {
@@ -111,12 +118,13 @@ void EthernetDisable::monitorAndDisableEthernet(int idleSeconds)
         while (!QThread::currentThread()->isInterruptionRequested()) {
             QThread::sleep(1);
 
-            // Re-validate that the interface still has the WATCH_IP and is up.
-            // If it was removed or changed, stop monitoring.
-            QString currentAdapter = findInterfaceNameWithIp();
+            // Re-validate that the interface is still there and has an IP.
+            // If it was removed, stop monitoring.
+            QHostAddress currentIp;
+            QString currentAdapter = findEthernetAdapter(currentIp);
             if (currentAdapter.isEmpty() || currentAdapter != adapterName) {
-                qDebug() << "Interface with IP" << WATCH_IP.toString()
-                << "is no longer present or has changed. Stopping monitor.";
+                qDebug() << "Interface" << adapterName
+                         << "is no longer present or has changed. Stopping monitor.";
                 return;
             }
 
@@ -127,7 +135,7 @@ void EthernetDisable::monitorAndDisableEthernet(int idleSeconds)
 
             last = now;
 
-            qDebug() << "[Traffic]" << WATCH_IP.toString() << "(" << adapterName << ")"
+            qDebug() << "[Traffic]" << currentIp.toString() << "(" << adapterName << ")"
                      << " RX:" << rxDiff << "bytes/sec"
                      << " TX:" << txDiff << "bytes/sec";
 
@@ -165,19 +173,19 @@ void EthernetDisable::startEthernetWatcher(int idleSeconds)
 {
     QtConcurrent::run([=]() {
 
-        qDebug() << "🔍 Ethernet watcher thread started (watching IP)"
-                 << WATCH_IP.toString();
+        qDebug() << "🔍 Ethernet watcher thread started.";
 
         bool lastState = false;
+        QHostAddress currentIp;
 
         while (!QThread::currentThread()->isInterruptionRequested() &&
                !QCoreApplication::closingDown())
         {
-            // find interface which has our IP and is up
-            QString adapterName = findInterfaceNameWithIp();
+            // find interface which is our Ethernet adapter and is up
+            QString adapterName = findEthernetAdapter(currentIp);
 
             if (adapterName.isEmpty()) {
-                // IP not present yet
+                // Adapter not active or has no IP yet
                 lastState = false;
                 QThread::sleep(1);
                 continue;
@@ -193,10 +201,10 @@ void EthernetDisable::startEthernetWatcher(int idleSeconds)
 
             // Trigger only on state change: Disconnected -> Connected
             if (connected && !lastState) {
-                qDebug() << "✔ Interface with IP" << WATCH_IP.toString()
-                    << "is CONNECTED → Starting monitor for adapter:" << adapterName;
+                qDebug() << "✔ Interface" << adapterName << "with IP" << currentIp.toString()
+                         << "is CONNECTED → Starting monitor.";
 
-                // Start monitoring ONLY this adapter (identified by the IP)
+                // Start monitoring ONLY this adapter
                 monitorAndDisableEthernet(idleSeconds);
                 return; // watcher returns because monitor will handle lifecycle
             }

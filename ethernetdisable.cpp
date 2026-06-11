@@ -1,5 +1,3 @@
-
-
 #include "EthernetDisable.h"
 
 #include <QDebug>
@@ -9,16 +7,20 @@
 #include <QtConcurrent>
 #include <QElapsedTimer>
 #include <QHostAddress>
+#include <QAbstractSocket>
+#include <QFile>
+#include <QTextStream>
+#include <QCoreApplication>
 
 EthernetDisable::EthernetDisable(QObject *parent)
     : QObject(parent)
 {
 }
 
-#include <QAbstractSocket>
-
 namespace {
-// Helper: find an Ethernet interface named "Ethernet" (or starting with "Ethernet ") that is up and has an IPv4 address.
+// Helper: find an Ethernet interface that is up and has an IPv4 address.
+// On Windows, it looks for "Ethernet", "Ethernet 1", or "Ethernet1".
+// On Android, it looks for "eth0" or "eth1".
 // Returns the human-readable adapter name and writes the IP address to outIp.
 static QString findEthernetAdapter(QHostAddress &outIp)
 {
@@ -33,11 +35,30 @@ static QString findEthernetAdapter(QHostAddress &outIp)
         if (!iface.flags().testFlag(QNetworkInterface::IsUp))
             continue;
 
+        bool isMatched = false;
+#if defined(Q_OS_WIN)
         // Check if name is exactly "Ethernet", "Ethernet 1", or "Ethernet1" (case-insensitive)
-        if (name.compare("Ethernet", Qt::CaseInsensitive) == 0 ||
-            name.compare("Ethernet 1", Qt::CaseInsensitive) == 0 ||
-            name.compare("Ethernet1", Qt::CaseInsensitive) == 0)
+        if (name.compare(QStringLiteral("Ethernet"), Qt::CaseInsensitive) == 0 ||
+            name.compare(QStringLiteral("Ethernet 1"), Qt::CaseInsensitive) == 0 ||
+            name.compare(QStringLiteral("Ethernet1"), Qt::CaseInsensitive) == 0)
         {
+            isMatched = true;
+        }
+#elif defined(Q_OS_ANDROID)
+        // Check if name is exactly "eth0" or "eth1" (case-insensitive)
+        if (name.compare(QStringLiteral("eth0"), Qt::CaseInsensitive) == 0 ||
+            name.compare(QStringLiteral("eth1"), Qt::CaseInsensitive) == 0)
+        {
+            isMatched = true;
+        }
+#else
+        // Fallback
+        if (name.compare(QStringLiteral("Ethernet"), Qt::CaseInsensitive) == 0) {
+            isMatched = true;
+        }
+#endif
+
+        if (isMatched) {
             qDebug() << "[EthernetDisable] Interface matched 1st Ethernet port:" << name;
             // Find its first IPv4 address
             for (const QNetworkAddressEntry &entry : iface.addressEntries()) {
@@ -60,8 +81,8 @@ static QString findEthernetAdapter(QHostAddress &outIp)
 
 void EthernetDisable::monitorAndDisableEthernet(int idleSeconds)
 {
-#ifndef Q_OS_WIN
-    qDebug() << "Ethernet monitoring only supported on Windows.";
+#if !defined(Q_OS_WIN) && !defined(Q_OS_ANDROID)
+    qDebug() << "Ethernet monitoring only supported on Windows and Android.";
     return;
 #endif
 
@@ -86,6 +107,7 @@ void EthernetDisable::monitorAndDisableEthernet(int idleSeconds)
 
         auto getTraffic = [&](const QString &ifaceName) -> Traffic {
             Traffic t;
+#if defined(Q_OS_WIN)
             QProcess p;
             p.start("netsh", {"interface", "ipv4", "show", "subinterfaces"});
             p.waitForFinished(1500);
@@ -112,6 +134,31 @@ void EthernetDisable::monitorAndDisableEthernet(int idleSeconds)
                     }
                 }
             }
+#else
+            // Read /proc/net/dev on Linux/Android
+            QFile file(QStringLiteral("/proc/net/dev"));
+            if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                QTextStream in(&file);
+                while (!in.atEnd()) {
+                    QString line = in.readLine().trimmed();
+                    if (line.startsWith(ifaceName + QStringLiteral(":"))) {
+                        // Line looks like: eth0: 123456 123 0 0 ... 654321 321 0 0 ...
+                        // Strip the interface name and colon
+                        QString data = line.mid(ifaceName.length() + 1).trimmed();
+                        QStringList parts = data.split(QRegExp("\\s+"), Qt::SkipEmptyParts);
+                        if (parts.size() >= 9) {
+                            bool ok1 = false, ok2 = false;
+                            // parts[0] is Received bytes, parts[8] is Transmitted bytes
+                            t.inBytes = parts[0].toLongLong(&ok1);
+                            t.outBytes = parts[8].toLongLong(&ok2);
+                            if (ok1 && ok2) {
+                                return t;
+                            }
+                        }
+                    }
+                }
+            }
+#endif
             return t;
         };
 
@@ -155,17 +202,29 @@ void EthernetDisable::monitorAndDisableEthernet(int idleSeconds)
                     qDebug() << "⚠ No RX traffic for" << idleSeconds
                              << "seconds → disabling adapter:" << adapterName;
 
+#if defined(Q_OS_WIN)
                     QProcess::execute(
                         "netsh",
                         {"interface", "set", "interface", adapterName, "admin=disable"}
                         );
+#elif defined(Q_OS_ANDROID)
+                    QProcess::execute(
+                        "su",
+                        {"-c", QStringLiteral("ip link set %1 down").arg(adapterName)}
+                        );
+#endif
 
                     // 🔥 WAIT 15 SECONDS AND RE-ENABLE
                     qDebug() << "⏳ Waiting 15 seconds before enabling adapter...";
                     QThread::sleep(15);
 
+#if defined(Q_OS_WIN)
                     QProcess::execute("netsh",
                                       {"interface", "set", "interface", adapterName, "admin=enable"});
+#elif defined(Q_OS_ANDROID)
+                    QProcess::execute("su",
+                                      {"-c", QStringLiteral("ip link set %1 up").arg(adapterName)});
+#endif
                     qDebug() << "✔ Adapter enabled again.";
 
                     // After re-enable, start watcher again to wait for the IP to be present again
@@ -201,13 +260,25 @@ void EthernetDisable::startEthernetWatcher(int idleSeconds)
                 continue;
             }
 
+            bool connected = false;
+#if defined(Q_OS_WIN)
             // We still check link state using netsh to determine "Connected" text
             QProcess p;
             p.start("netsh", {"interface", "show", "interface", adapterName});
             p.waitForFinished(800);
 
             QString out = p.readAllStandardOutput();
-            bool connected = out.contains("Connected");
+            connected = out.contains("Connected");
+#else
+            // On Android/Linux, check link carrier or assume connected if found
+            QFile file(QStringLiteral("/sys/class/net/%1/operstate").arg(adapterName));
+            if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                QString state = file.readAll().trimmed();
+                connected = (state == QStringLiteral("up") || state == QStringLiteral("unknown"));
+            } else {
+                connected = true; // Fallback
+            }
+#endif
 
             // Trigger only on state change: Disconnected -> Connected
             if (connected && !lastState) {

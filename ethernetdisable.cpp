@@ -30,9 +30,10 @@ static QString findEthernetAdapter(QHostAddress &outIp)
             continue;
 
         QString name = iface.humanReadableName();
-        // Check if name is "Ethernet" or starts with "Ethernet " (case-insensitive)
+        // Check if name is exactly "Ethernet", "Ethernet 1", or "Ethernet1" (case-insensitive)
         if (name.compare("Ethernet", Qt::CaseInsensitive) == 0 ||
-            name.startsWith("Ethernet ", Qt::CaseInsensitive)) 
+            name.compare("Ethernet 1", Qt::CaseInsensitive) == 0 ||
+            name.compare("Ethernet1", Qt::CaseInsensitive) == 0)
         {
             // Find its first IPv4 address
             for (const QNetworkAddressEntry &entry : iface.addressEntries()) {

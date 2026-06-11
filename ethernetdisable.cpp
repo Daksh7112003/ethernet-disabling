@@ -22,29 +22,38 @@ namespace {
 // Returns the human-readable adapter name and writes the IP address to outIp.
 static QString findEthernetAdapter(QHostAddress &outIp)
 {
+    qDebug() << "[EthernetDisable] Scanning network interfaces...";
     for (const QNetworkInterface &iface : QNetworkInterface::allInterfaces()) {
+        QString name = iface.humanReadableName();
+        // qDebug() << "[EthernetDisable] Found interface:" << name << "Type:" << iface.type() << "IsUp:" << iface.flags().testFlag(QNetworkInterface::IsUp);
+
         // Must be an Ethernet-like interface and be up
         if (iface.type() != QNetworkInterface::Ethernet)
             continue;
         if (!iface.flags().testFlag(QNetworkInterface::IsUp))
             continue;
 
-        QString name = iface.humanReadableName();
         // Check if name is exactly "Ethernet", "Ethernet 1", or "Ethernet1" (case-insensitive)
         if (name.compare("Ethernet", Qt::CaseInsensitive) == 0 ||
             name.compare("Ethernet 1", Qt::CaseInsensitive) == 0 ||
             name.compare("Ethernet1", Qt::CaseInsensitive) == 0)
         {
+            qDebug() << "[EthernetDisable] Interface matched 1st Ethernet port:" << name;
             // Find its first IPv4 address
             for (const QNetworkAddressEntry &entry : iface.addressEntries()) {
                 QHostAddress ip = entry.ip();
                 if (ip.protocol() == QAbstractSocket::IPv4Protocol) {
                     outIp = ip;
+                    qDebug() << "[EthernetDisable] Selected dynamic IP:" << ip.toString() << "on" << name;
                     return name;
+                } else {
+                    qDebug() << "[EthernetDisable] Skipping non-IPv4 address:" << ip.toString();
                 }
             }
+            qDebug() << "[EthernetDisable] No IPv4 address found for interface:" << name;
         }
     }
+    qDebug() << "[EthernetDisable] No matching active 1st Ethernet port found.";
     return QString();
 }
 }

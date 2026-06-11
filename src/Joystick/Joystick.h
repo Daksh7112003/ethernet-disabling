@@ -164,6 +164,8 @@ public:
 
     bool  deadband          () const;
     void  setDeadband       (bool accu);
+    bool    _armed                  = false;
+    QString _lastMode               = "";
 
     bool  circleCorrection  () const;
     void  setCircleCorrection(bool circleCorrection);

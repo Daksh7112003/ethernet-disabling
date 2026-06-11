@@ -65,6 +65,7 @@
 #include "PlanMasterController.h"
 #include "VideoManager.h"
 #include "VideoReceiver.h"
+#include "ethernetdisable.h"
 #include "LogDownloadController.h"
 #if !defined(QGC_DISABLE_MAVLINK_INSPECTOR)
 #include "MAVLinkInspectorController.h"
@@ -457,6 +458,7 @@ void QGCApplication::_initCommon()
     qmlRegisterType<QGCPalette>     ("QGroundControl.Palette", 1, 0, "QGCPalette");
     qmlRegisterType<QGCMapPalette>  ("QGroundControl.Palette", 1, 0, "QGCMapPalette");
 
+    qmlRegisterType<EthernetDisable> ("QGroundControl.EthernetDisable" , 1 , 0 , "EthernetDisable");
     qmlRegisterUncreatableType<Vehicle>                 (kQGCVehicle,                       1, 0, "Vehicle",                    kRefOnly);
     qmlRegisterUncreatableType<MissionManager>          (kQGCVehicle,                       1, 0, "MissionManager",             kRefOnly);
     qmlRegisterUncreatableType<ParameterManager>        (kQGCVehicle,                       1, 0, "ParameterManager",           kRefOnly);

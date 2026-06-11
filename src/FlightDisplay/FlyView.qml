@@ -16,6 +16,7 @@ import QtLocation               5.3
 import QtPositioning            5.3
 import QtQuick.Window           2.2
 import QtQml.Models             2.1
+import QtGraphicalEffects 1.12
 
 import QGroundControl               1.0
 import QGroundControl.Controllers   1.0
@@ -26,6 +27,7 @@ import QGroundControl.FlightMap     1.0
 import QGroundControl.Palette       1.0
 import QGroundControl.ScreenTools   1.0
 import QGroundControl.Vehicle       1.0
+
 
 Item {
     id: _root
@@ -39,6 +41,7 @@ Item {
         flyView:                true
         Component.onCompleted:  start()
     }
+
 
     property bool   _mainWindowIsMap:       mapControl.pipState.state === mapControl.pipState.fullState
     property bool   _isFullWindowItemDark:  _mainWindowIsMap ? mapControl.isSatelliteMap : true
@@ -162,6 +165,216 @@ Item {
         id: videoControl
     }
 
+    Rectangle {
+        id: servoRelease
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.margins: _margins * 10
+        width: parent.width / 10
+        height: parent.height / 12
+        radius: height / 2
+        color: "#4A90E2"   // soft blue button color
+        border.color: "#2C3E50"
+        border.width: 1
+
+        // Subtle shadow effect
+        layer.enabled: true
+        layer.effect: DropShadow {
+            color: "#00000066"
+            radius: 8
+            samples: 16
+            verticalOffset: 2
+        }
+
+        Text {
+            id: releaseBtn
+            text: qsTr("Release")
+            color: "white"
+            font.bold: true
+            anchors.centerIn: parent
+            font.pixelSize: parent.height / 2.5
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+
+            onPressed: parent.color = "#357ABD"  // darker on press
+            onReleased: parent.color = "#4A90E2" // normal color
+            onClicked: {
+                servoButtons.visible = true
+                servoRelease.visible = false
+            }
+
+            onEntered: parent.color = "#5AA0FF"  // lighter on hover
+            onExited: parent.color = "#4A90E2"
+        }
+    }
+
+
+    Rectangle {
+        id: servoButtons
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.margins: _margins * 10
+        color: "grey"
+        height: parent.height / 12
+        width: parent.width / 3
+        radius: 8
+
+        visible: false
+        Row {
+            spacing: parent.width / 40
+            anchors.centerIn: parent
+
+            // Button 1
+            Rectangle {
+                width: servoButtons.width / 8
+                height: servoButtons.height * 0.8
+                color: "lightblue"
+                radius: 4
+                border.color: "black"
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "Btn 1"
+                    color: "black"
+                    font.bold: true
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        let pwm  = 500
+_activeVehicle.servoRelease(pwm ,3)
+                    }
+                }
+            }
+
+            // Button 2
+            Rectangle {
+                width: servoButtons.width / 8
+                height: servoButtons.height * 0.8
+                color: "lightblue"
+                radius: 4
+                border.color: "black"
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "Btn 2"
+                    color: "black"
+                    font.bold: true
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        let pwm  = 833
+_activeVehicle.servoRelease(pwm ,10)
+                    }
+                }
+            }
+
+            // Button 3
+            Rectangle {
+                width: servoButtons.width / 8
+                height: servoButtons.height * 0.8
+                color: "lightblue"
+                radius: 4
+                border.color: "black"
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "Btn 3"
+                    color: "black"
+                    font.bold: true
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        let pwm  = 1166
+_activeVehicle.servoRelease(pwm ,3)
+                    }
+                }
+            }
+
+
+            // Button 4
+            Rectangle {
+                width: servoButtons.width / 8
+                height: servoButtons.height * 0.8
+                color: "lightblue"
+                radius: 4
+                border.color: "black"
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "Btn 4"
+                    color: "black"
+                    font.bold: true
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        let pwm  = 1499
+_activeVehicle.servoRelease(pwm ,3)
+                    }
+                }
+            }
+
+            // Button 5
+            Rectangle {
+                width: servoButtons.width / 8
+                height: servoButtons.height * 0.8
+                color: "lightblue"
+                radius: 4
+                border.color: "black"
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "Btn 5"
+                    color: "black"
+                    font.bold: true
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        let pwm  = 1832
+_activeVehicle.servoRelease(pwm ,3)
+                    }
+                }
+            }
+
+            // Button 6
+            Rectangle {
+                width: servoButtons.width / 8
+                height: servoButtons.height * 0.8
+                color: "lightblue"
+                radius: 4
+                border.color: "black"
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "Btn 6"
+                    color: "black"
+                    font.bold: true
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        let pwm  = 2165
+_activeVehicle.servoRelease(pwm ,3)
+                    }
+                }
+            }
+        }
+    }
+
+
     QGCPipOverlay {
         id:                     _pipOverlay
         anchors.left:           parent.left
@@ -175,4 +388,5 @@ Item {
         show:                   !QGroundControl.videoManager.fullScreen &&
                                     (videoControl.pipState.state === videoControl.pipState.pipState || mapControl.pipState.state === mapControl.pipState.pipState)
     }
+
 }

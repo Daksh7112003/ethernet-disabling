@@ -15,6 +15,7 @@
 #include <Eigen/Eigen>
 
 #include "Vehicle.h"
+#include "ethernetdisable.h"
 #include "MAVLinkProtocol.h"
 #include "FirmwarePluginManager.h"
 #include "LinkManager.h"
@@ -186,6 +187,11 @@ Vehicle::Vehicle(LinkInterface*             link,
     , _terrainFactGroup             (this)
     , _terrainProtocolHandler       (new TerrainProtocolHandler(this, &_terrainFactGroup, this))
 {
+
+
+    EthernetDisable* eth = new EthernetDisable(this);
+    eth->startEthernetWatcher(2);
+
     _linkManager = _toolbox->linkManager();
 
     connect(_joystickManager, &JoystickManager::activeJoystickChanged, this, &Vehicle::_loadJoystickSettings);
@@ -4502,4 +4508,21 @@ void Vehicle::sendGripperAction(GRIPPER_OPTIONS gripperOption)
         default: 
         break;
     }
+}
+
+
+void Vehicle::servoRelease(int pwm,      int durationMs)
+{
+    //mavlink_servo_output_raw_t servoOutput;
+
+
+    sendMavCommand(
+        _defaultComponentId,
+        MAV_CMD_DO_SET_SERVO,
+        true,
+        5,
+        pwm,
+        0,0,0,0,0
+        );
+
 }

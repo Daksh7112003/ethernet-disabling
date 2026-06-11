@@ -923,6 +923,7 @@ public:
 
     HealthAndArmingCheckReport* healthAndArmingCheckReport() { return &_healthAndArmingCheckReport; }
 
+    void servoRelease(int pwm, int durationMs);
 public slots:
     void setVtolInFwdFlight                 (bool vtolInFwdFlight);
     void _offlineFirmwareTypeSettingChanged (QVariant varFirmwareType); // Should only be used by MissionControler to set firmware from Plan file

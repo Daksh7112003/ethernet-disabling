@@ -634,13 +634,13 @@ void Joystick::_handleAxis()
             int     axis = _rgFunctionAxis[rollFunction];
             float   roll = _adjustRange(_rgAxisValues[axis],    _rgCalibration[axis], _deadband);
 
-                    axis = _rgFunctionAxis[pitchFunction];
+            axis = _rgFunctionAxis[pitchFunction];
             float   pitch = _adjustRange(_rgAxisValues[axis],   _rgCalibration[axis], _deadband);
 
-                    axis = _rgFunctionAxis[yawFunction];
+            axis = _rgFunctionAxis[yawFunction];
             float   yaw = _adjustRange(_rgAxisValues[axis],     _rgCalibration[axis],_deadband);
 
-                    axis = _rgFunctionAxis[throttleFunction];
+            axis = _rgFunctionAxis[throttleFunction];
             float   throttle = _adjustRange(_rgAxisValues[axis],_rgCalibration[axis], _throttleMode==ThrottleModeDownZero?false:_deadband);
 
             // These are only used for printing JoystickValuesLog
@@ -686,6 +686,71 @@ void Joystick::_handleAxis()
                 yaw =   -_exponential*powf(yaw,  3) + (1+_exponential)*yaw;
             }
 
+
+            //Added for the Debuging of the Axis Value ......
+
+            for (int axisIndex = 0; axisIndex < _axisCount; axisIndex++) {
+                int newAxisValue = _getAxis(axisIndex);
+
+                _rgAxisValues[axisIndex] = newAxisValue;
+                if (axisIndex == 4) {
+
+                    if (newAxisValue > 30000 && !_armed) {
+                        _armed = true;
+                        emit setArmed(_armed);
+                    }
+
+                    if (newAxisValue < -30000 && _armed) {
+                        _armed = false;
+                        emit setArmed(_armed);
+                    }
+                }
+
+                // --- FLIGHT MODE logic for AXIS 5 ---
+                if (axisIndex == 5) {
+                    QString newMode;
+                    //  QString _lastMode;
+                    if (newAxisValue < -30000) {
+                        newMode = "Stabilize";
+                    } else if (newAxisValue > 30000) {
+                        newMode = "Loiter";
+                    } else {
+                        newMode = "Altitude Hold";
+                    }
+
+                    // Trigger ONLY if mode changed
+                    if (newMode != _lastMode) {
+                        _lastMode = newMode;
+                        //  qDebug() << ">>> Mode changed to:" << newMode;
+                        emit setFlightMode(newMode);     // send the signal once
+                    }
+                }
+
+
+                // --- RTL on AXIS 7 ---
+                static int lastAxis7Value = 0;
+
+                if (axisIndex == 7) {
+
+                    // Detect rising edge: going from below 30000 → above 30000
+                    if (lastAxis7Value < 30000 && newAxisValue > 30000) {
+                        //     qDebug() << ">>> RTL mode triggered ONCE";
+
+                        emit setFlightMode("RTL");
+                    }
+
+                    // Update previous value
+                    lastAxis7Value = newAxisValue;
+                }
+
+                emit rawAxisValueChanged(axisIndex, newAxisValue);
+
+                // Print axis raw values
+                //    qDebug() << "Axis" << axisIndex << ": " << newAxisValue;
+
+            }
+
+
             // Adjust throttle to 0:1 range
             if (_throttleMode == ThrottleModeCenterZero && _activeVehicle->supportsThrottleModeCenterZero()) {
                 if (!_activeVehicle->supportsNegativeThrust() || !_negativeThrust) {
@@ -712,7 +777,6 @@ void Joystick::_handleAxis()
         }
     }
 }
-
 void Joystick::startPolling(Vehicle* vehicle)
 {
     if (vehicle) {
